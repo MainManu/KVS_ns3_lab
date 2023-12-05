@@ -35,4 +35,12 @@ mv $NS3DIR/scratch $NS3DIR/scratch_backup
 
 ```
 ln -s $REPO_FOLDER/scratch $NS3DIR
-``
+```
+
+Now you can work within ns3 as usual, and track the scratch folder using this repo.
+
+## Project report
+
+The project report is written in latex. Its source files are located in the report/ folder. 
+To build the document run build.sh. Make sure to install texlive first. Depending on your package 
+manager you might need to install additional subpackages.
