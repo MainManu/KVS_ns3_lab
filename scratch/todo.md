@@ -4,3 +4,8 @@
 - [ ] create report in latex
     - [ ]  use ieee template
     - [ ]  answer questions
+
+
+# notes
+
+Logging component name != class name
