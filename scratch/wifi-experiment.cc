@@ -24,6 +24,7 @@
 #include "ns3/wifi-phy.h"
 #include "ns3/wifi-utils.h"
 #include "ns3/yans-wifi-helper.h"
+#include "ns3/spectrum-wifi-helper.h"
 
 #include <iomanip>
 // #include <tuple.h>
@@ -90,20 +91,34 @@ main(int argc, char* argv[])
     CommandLine cmd(__FILE__);
     cmd.AddValue("distance", "distance between nodes", distance);
     cmd.AddValue("simulationTime", "simulation time in seconds", simulationTime);
-    cmd.AddValue("propagationModel", "propagation model to use", propagationModel);
+    // cmd.AddValue("propagationModel", "propagation model to use", propagationModel);
     cmd.Parse(argc, argv);
 
+    // // Create channel
+    // YansWifiChannelHelper channelHelper = YansWifiChannelHelper::Default();
+    // // channelHelper.AddPropagationLoss(propagationModel);
+    // YansWifiPhyHelper wifiPhy;
+    // wifiPhy.SetChannel(channelHelper.Create());
+    // StringValue wifi_channel_settings("{38, 40, BAND_5GHZ, 0}");
+    // wifiPhy.Set("ChannelSettings", wifi_channel_settings);
+    // wifiPhy.Set("TxPowerStart", ns3::DoubleValue(txPower));
+    // wifiPhy.Set("TxPowerEnd", ns3::DoubleValue(txPower));
+    // wifiPhy.Set("TxGain", ns3::DoubleValue(1.0));
+    // wifiPhy.Set("RxGain", ns3::DoubleValue(1.0));
+
+
     // Create channel
-    YansWifiChannelHelper channelHelper = YansWifiChannelHelper::Default();
-    // channelHelper.AddPropagationLoss(propagationModel);
-    YansWifiPhyHelper wifiPhy;
-    wifiPhy.SetChannel(channelHelper.Create());
-    StringValue wifi_channel_settings("{38, 40, BAND_5GHZ, 0}");
-    wifiPhy.Set("ChannelSettings", wifi_channel_settings);
-    wifiPhy.Set("TxPowerStart", ns3::DoubleValue(txPower));
-    wifiPhy.Set("TxPowerEnd", ns3::DoubleValue(txPower));
-    wifiPhy.Set("TxGain", ns3::DoubleValue(1.0));
-    wifiPhy.Set("RxGain", ns3::DoubleValue(1.0));
+    SpectrumWifiPhyHelper wifiPhy;
+    Ptr<MultiModelSpectrumChannel> channel = CreateObject<MultiModelSpectrumChannel>();
+    Ptr<PropagationLossModel> lossModel = CreateObject<FriisPropagationLossModel>();
+    channel->AddPropagationLossModel(lossModel);
+    Ptr<ConstantSpeedPropagationDelayModel> delayModel = CreateObject<ConstantSpeedPropagationDelayModel>();
+    channel->SetPropagationDelayModel(delayModel);
+    wifiPhy.SetChannel(channel);
+    wifiPhy.Set("TxPowerStart", DoubleValue(txPower));
+    wifiPhy.Set("TxPowerEnd", DoubleValue(txPower));
+    wifiPhy.Set("TxGain", DoubleValue(1.0));
+    wifiPhy.Set("RxGain", DoubleValue(1.0));
 
     // Create SSID
     Ssid ssid = Ssid("ns-3-ssid");
@@ -185,7 +200,7 @@ main(int argc, char* argv[])
         std::cout << "Flow " << i->first << " (" << t.sourceAddress << " -> "
                   << t.destinationAddress << ")\n";
         std::cout << "  Received data-rate: " << std::fixed << std::setprecision(2)
-                  << i->second.rxBytes * 8.0 / simulationTime - 2.0 / 1024 / 1024
+                  << i->second.rxBytes * 8.0 / (simulationTime - 2.0) / 1024 / 1024
                   << " Mbps\n"; // simulation only starts at 2 seconds
     }
 
