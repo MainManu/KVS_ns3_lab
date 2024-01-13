@@ -129,15 +129,15 @@ main(int argc, char* argv[])
 
     // Set up WiFi
     WifiHelper wifi;
-    wifi.SetStandard(WIFI_STANDARD_80211n);
     wifi.SetRemoteStationManager("ns3::ConstantRateWifiManager");
     AsciiTraceHelper ascii;
-    wifiPhy.EnableAsciiAll(ascii.CreateFileStream("wifi-experiment.tr"));
 
     // Install WiFi on nodes
     NodeContainer nodes;
     nodes.Create(2);
     NetDeviceContainer devices = wifi.Install(wifiPhy, wifiMacHelper, nodes);
+    wifi.SetStandard(WIFI_STANDARD_80211n);//this needs to be set after Install for some reason, otherwise "Can't find response rate for OfdmRate6Mbps"
+    wifiPhy.EnableAsciiAll(ascii.CreateFileStream("wifi-experiment.tr"));
     // Set up PHY RX callback to observe signal strength
     // After creating and installing devices on nodes
     // rx_pwr_utils rx_pwr;

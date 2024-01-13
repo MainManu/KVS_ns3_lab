@@ -82,11 +82,11 @@ main(int argc, char* argv[])
     wifiPhy.Set("TxGain", DoubleValue(1.0));
     wifiPhy.Set("RxGain", DoubleValue(1.0));
     WifiHelper wifi;
-    wifi.SetStandard(WIFI_STANDARD_80211n); //causes "Can't find response rate for OfdmRate6Mbps
     WifiMacHelper wifiMacHelper;
     wifiMacHelper.SetType("ns3::AdhocWifiMac", "Ssid", SsidValue(Ssid("ns-3-ssid")));
     wifi.SetRemoteStationManager("ns3::ConstantRateWifiManager");
     NetDeviceContainer wifiDevices = wifi.Install(wifiPhy, wifiMacHelper, nodes);
+    wifi.SetStandard(WIFI_STANDARD_80211n); //causes "Can't find response rate for OfdmRate6Mbps
 
     // mobility working confirmed
     double distance = 10.0;
