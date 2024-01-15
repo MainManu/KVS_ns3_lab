@@ -30,3 +30,13 @@
 *.exe
 *.out
 *.app
+
+# environment
+.env
+
+# pipenv
+Pipfile.lock
+
+# python 
+*.pyc
+*.pyo
