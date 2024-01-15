@@ -107,13 +107,13 @@ int main(int argc, char *argv[])
     double simulationTime = 10.0;
     double txPower = 10.0;
     std::string csv_export_path = "";
-    std::string propagationModel = "ns3::FriisPropagationLossModel";
+    std::string propagationModel = "FriisPropagationLossModel";
 
     CommandLine cmd(__FILE__);
     cmd.AddValue("distance", "distance between nodes", distance);
     cmd.AddValue("simulationTime", "simulation time in seconds", simulationTime);
     cmd.AddValue("csv_export_path", "path to export csv file, empty for no export", csv_export_path);
-    // cmd.AddValue("propagationModel", "propagation model to use", propagationModel);
+    cmd.AddValue("propagationModel", "propagation model to use", propagationModel);
     cmd.Parse(argc, argv);
 
     // say hello so I know when compilation is done
@@ -122,7 +122,21 @@ int main(int argc, char *argv[])
     // Create channel
     SpectrumWifiPhyHelper wifiPhy;
     Ptr<MultiModelSpectrumChannel> channel = CreateObject<MultiModelSpectrumChannel>();
-    Ptr<PropagationLossModel> lossModel = CreateObject<FriisPropagationLossModel>();
+    Ptr<PropagationLossModel> lossModel;
+    if (propagationModel == "FriisPropagationLossModel") {
+        lossModel = CreateObject<FriisPropagationLossModel>();
+    } else if (propagationModel == "FixedRssLossModel") {
+        lossModel = CreateObject<FixedRssLossModel>();
+    } else if (propagationModel == "ThreeLogDistancePropagationLossModel") {
+        lossModel = CreateObject<ThreeLogDistancePropagationLossModel>();
+    } else if (propagationModel == "TwoRayGroundPropagationLossModel") {
+        lossModel = CreateObject<TwoRayGroundPropagationLossModel>();
+    } else if (propagationModel == "NakagamiPropagationLossModel") {
+        lossModel = CreateObject<NakagamiPropagationLossModel>();
+    } else {
+        NS_FATAL_ERROR("No propagation model selected");
+        return -1;
+    }
     channel->AddPropagationLossModel(lossModel);
     Ptr<ConstantSpeedPropagationDelayModel> delayModel =
         CreateObject<ConstantSpeedPropagationDelayModel>();
