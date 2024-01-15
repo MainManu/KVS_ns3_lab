@@ -42,9 +42,15 @@ NS_LOG_COMPONENT_DEFINE("WifiExperiment");
 //     }
 // };
 
+double
+rate_to_s(double rate_Mbps, uint32_t packetSize_bytes)
+{
+    return (packetSize_bytes * 8.0) / (rate_Mbps * 1024.0 * 1024.0);
+}
+
 class rx_pwr_utils
 {
-  public:
+public:
     double DbmFromW(double w)
     {
         return 10.0 * std::log10(w) + 30.0;
@@ -67,8 +73,7 @@ class rx_pwr_utils
     }
 };
 
-int
-main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
     LogComponentEnable("WifiExperiment", LOG_LEVEL_ALL);
     // LogComponentEnable("UdpEchoClientApplication", LOG_LEVEL_ALL);
@@ -94,17 +99,8 @@ main(int argc, char* argv[])
     // cmd.AddValue("propagationModel", "propagation model to use", propagationModel);
     cmd.Parse(argc, argv);
 
-    // // Create channel
-    // YansWifiChannelHelper channelHelper = YansWifiChannelHelper::Default();
-    // // channelHelper.AddPropagationLoss(propagationModel);
-    // YansWifiPhyHelper wifiPhy;
-    // wifiPhy.SetChannel(channelHelper.Create());
-    // StringValue wifi_channel_settings("{38, 40, BAND_5GHZ, 0}");
-    // wifiPhy.Set("ChannelSettings", wifi_channel_settings);
-    // wifiPhy.Set("TxPowerStart", ns3::DoubleValue(txPower));
-    // wifiPhy.Set("TxPowerEnd", ns3::DoubleValue(txPower));
-    // wifiPhy.Set("TxGain", ns3::DoubleValue(1.0));
-    // wifiPhy.Set("RxGain", ns3::DoubleValue(1.0));
+    // say hello so I know when compilation is done
+    std::cout << std::setw(80) << "===starting wifi-experiment.cc===" << std::endl;
 
     // Create channel
     SpectrumWifiPhyHelper wifiPhy;
@@ -113,8 +109,10 @@ main(int argc, char* argv[])
     channel->AddPropagationLossModel(lossModel);
     Ptr<ConstantSpeedPropagationDelayModel> delayModel =
         CreateObject<ConstantSpeedPropagationDelayModel>();
+    StringValue wifi_channel_settings("{38, 40, BAND_5GHZ, 0}");
     channel->SetPropagationDelayModel(delayModel);
     wifiPhy.SetChannel(channel);
+    wifiPhy.Set("ChannelSettings", wifi_channel_settings);
     wifiPhy.Set("TxPowerStart", DoubleValue(txPower));
     wifiPhy.Set("TxPowerEnd", DoubleValue(txPower));
     wifiPhy.Set("TxGain", DoubleValue(1.0));
@@ -127,19 +125,12 @@ main(int argc, char* argv[])
 
     // Create wifi mac adhoc helper
     WifiMacHelper wifiMacHelper;
+    wifi.SetStandard(WIFI_STANDARD_80211n);
     wifiMacHelper.SetType("ns3::AdhocWifiMac", "Ssid", SsidValue(ssid));
 
-    // StringValue Datarate = StringValue("HtMcs19");
-    // wifi.SetRemoteStationManager("ns3::ConstantRateWifiManager",
-    //                              "DataMode",
-    //                              Datarate,
-    //                              "ControlMode",
-    //                              Datarate);
     wifi.SetRemoteStationManager("ns3::MinstrelHtWifiManager"); // Ht needed for 802.11n
     AsciiTraceHelper ascii;
-    wifi.SetStandard(
-        WIFI_STANDARD_80211n); // this needs to be set after Install for some reason, otherwise
-                               // "Can't find response rate for OfdmRate6Mbps"
+
     // Install WiFi on nodes
     NodeContainer nodes;
     nodes.Create(2);
@@ -173,29 +164,20 @@ main(int argc, char* argv[])
     Ipv4InterfaceContainer interfaces = address.Assign(devices);
 
     // Set up UDP traffic
-    // uint16_t port = 9; // Discard port (RFC 863)
-    // OnOffHelper onoff("ns3::UdpSocketFactory", InetSocketAddress(interfaces.GetAddress(1),
-    // port)); onoff.SetConstantRate(DataRate("75Mbps"), 1450); ApplicationContainer source_apps =
-    // onoff.Install(nodes.Get(0)); source_apps.Start(Seconds(2.0));
-    // source_apps.Stop(Seconds(simulationTime));
-
-    // // Set up packet sink
-    // PacketSinkHelper sink("ns3::UdpSocketFactory", InetSocketAddress(Ipv4Address::GetAny(),
-    // port)); ApplicationContainer sink_apps = sink.Install(nodes.Get(1));
-    // sink_apps.Start(Seconds(1.0));
-    // sink_apps.Stop(Seconds(simulationTime));
     uint16_t port = 9;
-    uint16_t payloadSize = 1450;
+    uint16_t payloadSize_bits = 1450;
     ApplicationContainer serverApp;
     UdpServerHelper server(port);
     serverApp = server.Install(nodes.Get(1));
     serverApp.Start(Seconds(0.0));
     serverApp.Stop(Seconds(simulationTime + 1));
 
+    double data_rate_Mbps = 75.0;
+    double data_rate_s = rate_to_s(data_rate_Mbps, payloadSize_bits);
     UdpClientHelper client(interfaces.GetAddress(1), port);
     client.SetAttribute("MaxPackets", UintegerValue(4294967295U));
-    client.SetAttribute("Interval", TimeValue(Time("0.0001"))); // packets/s
-    client.SetAttribute("PacketSize", UintegerValue(payloadSize));
+    client.SetAttribute("Interval", TimeValue(Seconds(data_rate_s))); // packets/s
+    client.SetAttribute("PacketSize", UintegerValue(payloadSize_bits));
     ApplicationContainer clientApp = client.Install(nodes.Get(0));
     clientApp.Start(Seconds(1.0));
     clientApp.Stop(Seconds(simulationTime + 1));
@@ -206,8 +188,8 @@ main(int argc, char* argv[])
     // // Set up PHY RX callback to observe signal strength
     // // Config::Connect("/NodeList/*/DeviceList/*/Phy/RxBegin",
     // // MakeCallback(&rx_pwr::operator(), new rx_pwr()));
-    // // Run simulation
 
+    // Run simulation
     Simulator::Stop(Seconds(simulationTime));
     Simulator::Run();
 
@@ -223,7 +205,7 @@ main(int argc, char* argv[])
         std::cout << "Flow " << i->first << " (" << t.sourceAddress << " -> "
                   << t.destinationAddress << ")\n";
         std::cout << "  Received data-rate: " << std::fixed << std::setprecision(2)
-                  << i->second.rxBytes * 8.0 / (simulationTime - 2.0) / 1024 / 1024
+                  << i->second.rxBytes * 8.0 / simulationTime / 1024 / 1024
                   << " Mbps\n"; // simulation only starts at 2 seconds
     }
 
