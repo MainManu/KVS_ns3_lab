@@ -16,6 +16,7 @@
 #include "ns3/packet-sink-helper.h"
 #include "ns3/packet-sink.h"
 #include "ns3/propagation-loss-model.h"
+#include "ns3/spectrum-wifi-helper.h"
 #include "ns3/ssid.h"
 #include "ns3/string.h"
 #include "ns3/udp-client-server-helper.h"
@@ -24,7 +25,6 @@
 #include "ns3/wifi-phy.h"
 #include "ns3/wifi-utils.h"
 #include "ns3/yans-wifi-helper.h"
-#include "ns3/spectrum-wifi-helper.h"
 
 #include <iomanip>
 // #include <tuple.h>
@@ -106,13 +106,13 @@ main(int argc, char* argv[])
     // wifiPhy.Set("TxGain", ns3::DoubleValue(1.0));
     // wifiPhy.Set("RxGain", ns3::DoubleValue(1.0));
 
-
     // Create channel
     SpectrumWifiPhyHelper wifiPhy;
     Ptr<MultiModelSpectrumChannel> channel = CreateObject<MultiModelSpectrumChannel>();
     Ptr<PropagationLossModel> lossModel = CreateObject<FriisPropagationLossModel>();
     channel->AddPropagationLossModel(lossModel);
-    Ptr<ConstantSpeedPropagationDelayModel> delayModel = CreateObject<ConstantSpeedPropagationDelayModel>();
+    Ptr<ConstantSpeedPropagationDelayModel> delayModel =
+        CreateObject<ConstantSpeedPropagationDelayModel>();
     channel->SetPropagationDelayModel(delayModel);
     wifiPhy.SetChannel(channel);
     wifiPhy.Set("TxPowerStart", DoubleValue(txPower));
@@ -120,6 +120,8 @@ main(int argc, char* argv[])
     wifiPhy.Set("TxGain", DoubleValue(1.0));
     wifiPhy.Set("RxGain", DoubleValue(1.0));
 
+    // Set up WiFi
+    WifiHelper wifi;
     // Create SSID
     Ssid ssid = Ssid("ns-3-ssid");
 
@@ -127,16 +129,22 @@ main(int argc, char* argv[])
     WifiMacHelper wifiMacHelper;
     wifiMacHelper.SetType("ns3::AdhocWifiMac", "Ssid", SsidValue(ssid));
 
-    // Set up WiFi
-    WifiHelper wifi;
-    wifi.SetRemoteStationManager("ns3::ConstantRateWifiManager");
+    // StringValue Datarate = StringValue("HtMcs19");
+    // wifi.SetRemoteStationManager("ns3::ConstantRateWifiManager",
+    //                              "DataMode",
+    //                              Datarate,
+    //                              "ControlMode",
+    //                              Datarate);
+    wifi.SetRemoteStationManager("ns3::MinstrelHtWifiManager"); // Ht needed for 802.11n
     AsciiTraceHelper ascii;
-
+    wifi.SetStandard(
+        WIFI_STANDARD_80211n); // this needs to be set after Install for some reason, otherwise
+                               // "Can't find response rate for OfdmRate6Mbps"
     // Install WiFi on nodes
     NodeContainer nodes;
     nodes.Create(2);
     NetDeviceContainer devices = wifi.Install(wifiPhy, wifiMacHelper, nodes);
-    wifi.SetStandard(WIFI_STANDARD_80211n);//this needs to be set after Install for some reason, otherwise "Can't find response rate for OfdmRate6Mbps"
+
     wifiPhy.EnableAsciiAll(ascii.CreateFileStream("wifi-experiment.tr"));
     // Set up PHY RX callback to observe signal strength
     // After creating and installing devices on nodes
@@ -165,26 +173,41 @@ main(int argc, char* argv[])
     Ipv4InterfaceContainer interfaces = address.Assign(devices);
 
     // Set up UDP traffic
-    uint16_t port = 9; // Discard port (RFC 863)
-    OnOffHelper onoff("ns3::UdpSocketFactory", InetSocketAddress(interfaces.GetAddress(1), port));
-    onoff.SetConstantRate(DataRate("75Mbps"), 1450);
-    ApplicationContainer source_apps = onoff.Install(nodes.Get(0));
-    source_apps.Start(Seconds(2.0));
-    source_apps.Stop(Seconds(simulationTime));
+    // uint16_t port = 9; // Discard port (RFC 863)
+    // OnOffHelper onoff("ns3::UdpSocketFactory", InetSocketAddress(interfaces.GetAddress(1),
+    // port)); onoff.SetConstantRate(DataRate("75Mbps"), 1450); ApplicationContainer source_apps =
+    // onoff.Install(nodes.Get(0)); source_apps.Start(Seconds(2.0));
+    // source_apps.Stop(Seconds(simulationTime));
 
-    // Set up packet sink
-    PacketSinkHelper sink("ns3::UdpSocketFactory", InetSocketAddress(Ipv4Address::GetAny(), port));
-    ApplicationContainer sink_apps = sink.Install(nodes.Get(1));
-    sink_apps.Start(Seconds(1.0));
-    sink_apps.Stop(Seconds(simulationTime));
+    // // Set up packet sink
+    // PacketSinkHelper sink("ns3::UdpSocketFactory", InetSocketAddress(Ipv4Address::GetAny(),
+    // port)); ApplicationContainer sink_apps = sink.Install(nodes.Get(1));
+    // sink_apps.Start(Seconds(1.0));
+    // sink_apps.Stop(Seconds(simulationTime));
+    uint16_t port = 9;
+    uint16_t payloadSize = 1450;
+    ApplicationContainer serverApp;
+    UdpServerHelper server(port);
+    serverApp = server.Install(nodes.Get(1));
+    serverApp.Start(Seconds(0.0));
+    serverApp.Stop(Seconds(simulationTime + 1));
 
-    // Set up FlowMonitor to observe received data-rate
+    UdpClientHelper client(interfaces.GetAddress(1), port);
+    client.SetAttribute("MaxPackets", UintegerValue(4294967295U));
+    client.SetAttribute("Interval", TimeValue(Time("0.0001"))); // packets/s
+    client.SetAttribute("PacketSize", UintegerValue(payloadSize));
+    ApplicationContainer clientApp = client.Install(nodes.Get(0));
+    clientApp.Start(Seconds(1.0));
+    clientApp.Stop(Seconds(simulationTime + 1));
+
+    // // Set up FlowMonitor to observe received data-rate
     FlowMonitorHelper flowmon;
     Ptr<FlowMonitor> monitor = flowmon.InstallAll();
-    // Set up PHY RX callback to observe signal strength
-    // Config::Connect("/NodeList/*/DeviceList/*/Phy/RxBegin",
-    // MakeCallback(&rx_pwr::operator(), new rx_pwr()));
-    // Run simulation
+    // // Set up PHY RX callback to observe signal strength
+    // // Config::Connect("/NodeList/*/DeviceList/*/Phy/RxBegin",
+    // // MakeCallback(&rx_pwr::operator(), new rx_pwr()));
+    // // Run simulation
+
     Simulator::Stop(Seconds(simulationTime));
     Simulator::Run();
 
