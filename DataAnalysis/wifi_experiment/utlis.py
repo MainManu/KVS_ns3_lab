@@ -54,3 +54,9 @@ class experiment_run:
             f"{self.host.ns3dir}/ns3 run scratch/wifi-experiment.cc -- --distance={self.distance_m} --simulationTime={self.simulationTime_s} --csv_export_path={self.remote_csv_path} --propagationModel={self.propModel}")
         print(output)
         self.host.getfile(self.remote_csv_path, self.local_csv_path)
+
+# TODO: verify
+
+
+def combine_all_experiment_parameters(propagationModels, simulationTime_s, distance_m):
+    return [(propModel, simulationTime, distance) for propModel in propagationModels for simulationTime in simulationTime_s for distance in distance_m]
