@@ -34,9 +34,10 @@ using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("WifiExperiment");
 
-// struct rx_pwr {
-//     void operator()(Ptr<const Packet> packet, double snr, WifiMode mode, enum WifiPreamble
-//     preamble) {
+// struct rx_pwr
+// {
+//     void operator()(Ptr<const Packet> packet, double snr, WifiMode mode, enum WifiPreamble preamble)
+//     {
 //         double signalStrengthDbm = RatioToDb(snr) + 30;
 //         std::cout << "Signal strength: " << signalStrengthDbm << " dBm" << std::endl;
 //     }
@@ -51,6 +52,18 @@ rate_to_s(double rate_Mbps, uint32_t packetSize_bytes)
 class rx_pwr_utils
 {
 public:
+    std::vector<std::tuple<double, double>> v_rx_pwr_dbm;
+
+    double get_avg_rx_pwr_dbm()
+    {
+        double sum = 0.0;
+        for (auto &t : v_rx_pwr_dbm)
+        {
+            sum += std::get<1>(t);
+        }
+        return sum / v_rx_pwr_dbm.size();
+    }
+
     double DbmFromW(double w)
     {
         return 10.0 * std::log10(w) + 30.0;
@@ -63,13 +76,15 @@ public:
                       enum WifiPreamble preamble)
     {
         double rxPowerDbm = DbmFromW(snr * WToDbm(1.0));
-        std::cout << context << " Received packet with power " << rxPowerDbm << " dBm\n";
+        v_rx_pwr_dbm.push_back(std::make_tuple(Simulator::Now().GetSeconds(), rxPowerDbm));
+        NS_LOG_INFO(context << " Received packet with power " << rxPowerDbm << " dBm\n");
     }
 
     void RxErrorCallback(std::string context, Ptr<const Packet> packet, double snr)
     {
         double rxPowerDbm = DbmFromW(snr * WToDbm(1.0));
-        std::cout << context << " Received packet with errors, power " << rxPowerDbm << " dBm\n";
+        
+        NS_LOG_INFO( context << " Received packet with errors, power " << rxPowerDbm << " dBm\n");
     }
 };
 
@@ -91,11 +106,13 @@ int main(int argc, char *argv[])
     double distance = 10.0;
     double simulationTime = 10.0;
     double txPower = 10.0;
+    std::string csv_export_path = "";
     std::string propagationModel = "ns3::FriisPropagationLossModel";
 
     CommandLine cmd(__FILE__);
     cmd.AddValue("distance", "distance between nodes", distance);
     cmd.AddValue("simulationTime", "simulation time in seconds", simulationTime);
+    cmd.AddValue("csv_export_path", "path to export csv file, empty for no export", csv_export_path);
     // cmd.AddValue("propagationModel", "propagation model to use", propagationModel);
     cmd.Parse(argc, argv);
 
@@ -186,11 +203,19 @@ int main(int argc, char *argv[])
     FlowMonitorHelper flowmon;
     Ptr<FlowMonitor> monitor = flowmon.InstallAll();
     // // Set up PHY RX callback to observe signal strength
-    // // Config::Connect("/NodeList/*/DeviceList/*/Phy/RxBegin",
-    // // MakeCallback(&rx_pwr::operator(), new rx_pwr()));
+    // Config::Connect("/NodeList/*/DeviceList/*/Phy/RxBegin", MakeCallback(&rx_pwr::operator(), new rx_pwr()));
 
-    // Run simulation
     Simulator::Stop(Seconds(simulationTime));
+
+    // Set up PHY RX callback to observe signal strength
+    //After creating and installing devices on nodes
+    rx_pwr_utils rx_pwr;
+    Config::Connect("/NodeList/*/DeviceList/*/Phy/State/RxOk",
+                    MakeCallback(&rx_pwr_utils::RxOkCallback, &rx_pwr));
+    Config::Connect("/NodeList/*/DeviceList/*/Phy/State/RxError",
+                    MakeCallback(&rx_pwr_utils::RxErrorCallback, &rx_pwr));
+
+
     Simulator::Run();
 
     // Print FlowMonitor statistics
@@ -208,6 +233,30 @@ int main(int argc, char *argv[])
                   << i->second.rxBytes * 8.0 / simulationTime / 1024 / 1024
                   << " Mbps\n"; // simulation only starts at 2 seconds
     }
+
+    std::cout << "Average Rx power: " << rx_pwr.get_avg_rx_pwr_dbm() << " dBm" << std::endl;
+
+    if(csv_export_path != ""){
+        std::ofstream csvFile;
+        csvFile.open(csv_export_path );
+        csvFile << "FlowId,SourceAddress,DestinationAddress,ReceivedDataRate,AverageRxPower\n";
+
+        for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin();
+            i != stats.end();
+            ++i)
+        {
+            Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow(i->first);
+            double receivedDataRate = i->second.rxBytes * 8.0 / simulationTime / 1024 / 1024; // Mbps
+            csvFile << i->first << ","
+                    << t.sourceAddress << ","
+                    << t.destinationAddress << ","
+                    << std::fixed << std::setprecision(2) << receivedDataRate << ","
+                    << rx_pwr.get_avg_rx_pwr_dbm() << "\n";
+        }
+
+        csvFile.close();
+    }
+
 
     Simulator::Destroy();
 }
