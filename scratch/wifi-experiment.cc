@@ -30,18 +30,13 @@
 // #include <tuple.h>
 // #include <enum.h>
 
+#define NO_PROPAGATION_MODEL -1
+#define IP4_OVERHEAD 20
+#define UDP_OVERHEAD 8
+
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("WifiExperiment");
-
-// struct rx_pwr
-// {
-//     void operator()(Ptr<const Packet> packet, double snr, WifiMode mode, enum WifiPreamble preamble)
-//     {
-//         double signalStrengthDbm = RatioToDb(snr) + 30;
-//         std::cout << "Signal strength: " << signalStrengthDbm << " dBm" << std::endl;
-//     }
-// };
 
 double
 rate_to_s(double rate_Mbps, uint32_t packetSize_bytes)
@@ -49,24 +44,39 @@ rate_to_s(double rate_Mbps, uint32_t packetSize_bytes)
     return (packetSize_bytes * 8.0) / (rate_Mbps * 1024.0 * 1024.0);
 }
 
-class rx_pwr_utils
+void
+exportMapToCSV(const std::map<Time, double>& map_time_to_x,
+               const std::string& filename,
+               const std::string& valueName)
 {
-public:
-    std::vector<std::tuple<double, double>> v_rx_pwr_dbm;
+    std::ofstream file(filename);
 
-    double get_avg_rx_pwr_dbm()
+    // Write the header
+    file << "Time," + valueName + "\n";
+
+    // Write the data
+    for (const auto& pair : map_time_to_x)
     {
-        double sum = 0.0;
-        for (auto &t : v_rx_pwr_dbm)
-        {
-            sum += std::get<1>(t);
-        }
-        return sum / v_rx_pwr_dbm.size();
+        file << pair.first.GetSeconds() << "," << pair.second << "\n";
     }
 
-    double DbmFromW(double w)
+    file.close();
+}
+
+// TODO: (optional) make this a template class
+class rx_dr_utils
+{
+  public:
+    std::map<Time, double> map_time_to_rxDr_bps;
+
+    double get_avg_rx_dr()
     {
-        return 10.0 * std::log10(w) + 30.0;
+        double sum = 0.0;
+        for (const auto& pair : map_time_to_rxDr_bps)
+        {
+            sum += pair.second;
+        }
+        return sum / map_time_to_rxDr_bps.size();
     }
 
     void RxOkCallback(std::string context,
@@ -75,22 +85,80 @@ public:
                       WifiMode mode,
                       enum WifiPreamble preamble)
     {
-        double rxPowerDbm = DbmFromW(snr * WToDbm(1.0));
-        v_rx_pwr_dbm.push_back(std::make_tuple(Simulator::Now().GetSeconds(), rxPowerDbm));
-        NS_LOG_INFO(context << " Received packet with power " << rxPowerDbm << " dBm\n");
+        // double rx_dr = mode.GetPhyRate();
+        // // double rx_dr = mode.GetDataRate();
+        // Time now = Simulator::Now();
+        static Time lastTime = Seconds(0); // Time of the last packet (initially 0)
+        Time now = Simulator::Now();       // Current time
+        Time interval = now - lastTime;    // Time interval between packets
+        lastTime = now;                    // Update the time of the last packet
+
+        if (interval.GetSeconds() == 0) // handle first packet to avoid divide by zero
+        {
+            map_time_to_rxDr_bps[now] = 0;
+            return;
+        }
+
+        uint32_t totalSize = packet->GetSize(); // Get the total size of the packet in bytes
+        uint32_t headerSize =
+            IP4_OVERHEAD + UDP_OVERHEAD;               // Size of UDP header + size of IPv4 header
+        uint32_t payloadSize = totalSize - headerSize; // Size of the UDP payload
+
+        double dataRate = payloadSize * 8 / interval.GetSeconds(); // Data rate in bits per second
+
+        map_time_to_rxDr_bps[now] = dataRate;
     }
 
-    void RxErrorCallback(std::string context, Ptr<const Packet> packet, double snr)
+    std::map<Time, double> convert_map_to_Mps()
     {
-        double rxPowerDbm = DbmFromW(snr * WToDbm(1.0));
-        
-        NS_LOG_INFO( context << " Received packet with errors, power " << rxPowerDbm << " dBm\n");
+        std::map<Time, double> map_time_to_rxDr_Mbps;
+        for (const auto& pair : map_time_to_rxDr_bps)
+        {
+            map_time_to_rxDr_Mbps[pair.first] = pair.second / 1024.0 / 1024.0;
+        }
+        return map_time_to_rxDr_Mbps;
+    }
+
+    void export_to_csv(const std::string& filename)
+    {
+        exportMapToCSV(convert_map_to_Mps(), filename + "_dr.csv", "DataRate_Mbps");
     }
 };
 
-int main(int argc, char *argv[])
+class rx_pwr_utils
 {
-    LogComponentEnable("WifiExperiment", LOG_LEVEL_ALL);
+  public:
+    std::map<Time, double> map_rx_pwr;
+
+    void SignalArrivalCallback(std::string context,
+                               bool signalType,
+                               uint32_t senderNodeId,
+                               double rxPower,
+                               Time duration)
+    {
+        map_rx_pwr[Simulator::Now()] = rxPower;
+    }
+
+    double get_avg_rx_pwr_dbm()
+    {
+        double sum = 0.0;
+        for (const auto& entry : map_rx_pwr)
+        {
+            sum += entry.second;
+        }
+        return sum / map_rx_pwr.size();
+    }
+
+    void export_to_csv(const std::string& filename)
+    {
+        exportMapToCSV(map_rx_pwr, filename + "_pwr.csv", "RxPower");
+    }
+};
+
+int
+main(int argc, char* argv[])
+{
+    LogComponentEnable("WifiExperiment", LOG_LEVEL_ERROR);
     // LogComponentEnable("UdpEchoClientApplication", LOG_LEVEL_ALL);
     // LogComponentEnable("UdpEchoServerApplication", LOG_LEVEL_ALL);
     // LogComponentEnable("WifiHelper", LOG_LEVEL_ALL);
@@ -107,13 +175,22 @@ int main(int argc, char *argv[])
     double simulationTime = 10.0;
     double txPower = 10.0;
     std::string csv_export_path = "";
+    bool export_summary = false;
+    bool export_rx_pwr = false;
+    bool export_rx_dr = false;
     std::string propagationModel = "FriisPropagationLossModel";
 
     CommandLine cmd(__FILE__);
     cmd.AddValue("distance", "distance between nodes", distance);
     cmd.AddValue("simulationTime", "simulation time in seconds", simulationTime);
-    cmd.AddValue("csv_export_path", "path to export csv file, empty for no export", csv_export_path);
+    cmd.AddValue("csv_export_path",
+                 "path to export csv file, empty for no export",
+                 csv_export_path);
     cmd.AddValue("propagationModel", "propagation model to use", propagationModel);
+    cmd.AddValue("export_summary", "export summary to csv (true,false)", export_summary);
+    cmd.AddValue("export_rx_pwr", "export rx power to csv (true,false)", export_rx_pwr);
+    cmd.AddValue("export_rx_dr", "export rx data rate to csv (true,false)", export_rx_dr);
+
     cmd.Parse(argc, argv);
 
     // say hello so I know when compilation is done
@@ -123,19 +200,30 @@ int main(int argc, char *argv[])
     SpectrumWifiPhyHelper wifiPhy;
     Ptr<MultiModelSpectrumChannel> channel = CreateObject<MultiModelSpectrumChannel>();
     Ptr<PropagationLossModel> lossModel;
-    if (propagationModel == "FriisPropagationLossModel") {
+    if (propagationModel == "FriisPropagationLossModel")
+    {
         lossModel = CreateObject<FriisPropagationLossModel>();
-    } else if (propagationModel == "FixedRssLossModel") {
+    }
+    else if (propagationModel == "FixedRssLossModel")
+    {
         lossModel = CreateObject<FixedRssLossModel>();
-    } else if (propagationModel == "ThreeLogDistancePropagationLossModel") {
+    }
+    else if (propagationModel == "ThreeLogDistancePropagationLossModel")
+    {
         lossModel = CreateObject<ThreeLogDistancePropagationLossModel>();
-    } else if (propagationModel == "TwoRayGroundPropagationLossModel") {
+    }
+    else if (propagationModel == "TwoRayGroundPropagationLossModel")
+    {
         lossModel = CreateObject<TwoRayGroundPropagationLossModel>();
-    } else if (propagationModel == "NakagamiPropagationLossModel") {
+    }
+    else if (propagationModel == "NakagamiPropagationLossModel")
+    {
         lossModel = CreateObject<NakagamiPropagationLossModel>();
-    } else {
+    }
+    else
+    {
         NS_FATAL_ERROR("No propagation model selected");
-        return -1;
+        return NO_PROPAGATION_MODEL;
     }
     channel->AddPropagationLossModel(lossModel);
     Ptr<ConstantSpeedPropagationDelayModel> delayModel =
@@ -166,6 +254,14 @@ int main(int argc, char *argv[])
     NodeContainer nodes;
     nodes.Create(2);
     NetDeviceContainer devices = wifi.Install(wifiPhy, wifiMacHelper, nodes);
+
+    for (NetDeviceContainer::Iterator i = devices.Begin(); i != devices.End();
+         ++i) // apparently NetDeviceContainer do not support range-based for loop because they
+              // chose to capitalize the End and Begin functions. Something something legacy
+              // support. I hate it
+    {
+        (*i)->SetMtu(1500);
+    }
 
     wifiPhy.EnableAsciiAll(ascii.CreateFileStream("wifi-experiment.tr"));
     // Set up PHY RX callback to observe signal strength
@@ -217,19 +313,23 @@ int main(int argc, char *argv[])
     FlowMonitorHelper flowmon;
     Ptr<FlowMonitor> monitor = flowmon.InstallAll();
     // // Set up PHY RX callback to observe signal strength
-    // Config::Connect("/NodeList/*/DeviceList/*/Phy/RxBegin", MakeCallback(&rx_pwr::operator(), new rx_pwr()));
+    // Config::Connect("/NodeList/*/DeviceList/*/Phy/RxBegin", MakeCallback(&rx_pwr::operator(), new
+    // rx_pwr()));
 
     Simulator::Stop(Seconds(simulationTime));
 
     // Set up PHY RX callback to observe signal strength
-    //After creating and installing devices on nodes
+    // After creating and installing devices on nodes
     rx_pwr_utils rx_pwr;
-    Config::Connect("/NodeList/*/DeviceList/*/Phy/State/RxOk",
-                    MakeCallback(&rx_pwr_utils::RxOkCallback, &rx_pwr));
-    Config::Connect("/NodeList/*/DeviceList/*/Phy/State/RxError",
-                    MakeCallback(&rx_pwr_utils::RxErrorCallback, &rx_pwr));
-
-
+    rx_dr_utils rx_dr;
+    // Config::Connect("/NodeList/*/DeviceList/*/Phy/State/RxOk",
+    // MakeCallback(&rx_pwr_utils::RxOkCallback, &rx_pwr));
+    // Config::Connect("/NodeList/*/DeviceList/*/Phy/State/RxError",
+    // MakeCallback(&rx_pwr_utils::RxErrorCallback, &rx_pwr));
+    Config::Connect("/NodeList/1/DeviceList/*/Phy/SignalArrival",
+                    MakeCallback(&rx_pwr_utils::SignalArrivalCallback, &rx_pwr));
+    Config::Connect("/NodeList/1/DeviceList/*/Phy/State/RxOk",
+                    MakeCallback(&rx_dr_utils::RxOkCallback, &rx_dr));
     Simulator::Run();
 
     // Print FlowMonitor statistics
@@ -250,27 +350,37 @@ int main(int argc, char *argv[])
 
     std::cout << "Average Rx power: " << rx_pwr.get_avg_rx_pwr_dbm() << " dBm" << std::endl;
 
-    if(csv_export_path != ""){
-        std::ofstream csvFile;
-        csvFile.open(csv_export_path );
-        csvFile << "FlowId,SourceAddress,DestinationAddress,ReceivedDataRate,AverageRxPower\n";
-
-        for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin();
-            i != stats.end();
-            ++i)
+    if (csv_export_path != "")
+    {
+        if (export_summary)
         {
-            Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow(i->first);
-            double receivedDataRate = i->second.rxBytes * 8.0 / simulationTime / 1024 / 1024; // Mbps
-            csvFile << i->first << ","
-                    << t.sourceAddress << ","
-                    << t.destinationAddress << ","
-                    << std::fixed << std::setprecision(2) << receivedDataRate << ","
-                    << rx_pwr.get_avg_rx_pwr_dbm() << "\n";
+            std::ofstream csvFile;
+            csvFile.open(csv_export_path + "summary.csv");
+            csvFile << "FlowId,SourceAddress,DestinationAddress,ReceivedDataRate,AverageRxPower\n";
+
+            for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin();
+                 i != stats.end();
+                 ++i)
+            {
+                Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow(i->first);
+                double receivedDataRate =
+                    i->second.rxBytes * 8.0 / simulationTime / 1024 / 1024; // Mbps
+                csvFile << i->first << "," << t.sourceAddress << "," << t.destinationAddress << ","
+                        << std::fixed << std::setprecision(2) << receivedDataRate << ","
+                        << rx_pwr.get_avg_rx_pwr_dbm() << "\n";
+            }
+
+            csvFile.close();
         }
-
-        csvFile.close();
+        if (export_rx_pwr)
+        {
+            rx_pwr.export_to_csv(csv_export_path);
+        }
+        if (export_rx_dr)
+        {
+            rx_dr.export_to_csv(csv_export_path);
+        }
     }
-
 
     Simulator::Destroy();
 }
