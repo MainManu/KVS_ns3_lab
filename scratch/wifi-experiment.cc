@@ -207,6 +207,8 @@ main(int argc, char* argv[])
     else if (propagationModel == "FixedRssLossModel")
     {
         lossModel = CreateObject<FixedRssLossModel>();
+        // Set the received signal strength
+        lossModel->SetAttribute("Rss", DoubleValue(-50)); // in dBm
     }
     else if (propagationModel == "ThreeLogDistancePropagationLossModel")
     {
@@ -215,10 +217,16 @@ main(int argc, char* argv[])
     else if (propagationModel == "TwoRayGroundPropagationLossModel")
     {
         lossModel = CreateObject<TwoRayGroundPropagationLossModel>();
+        // Set the height of the antennas
+        lossModel->SetAttribute("HeightAboveZ", DoubleValue(1.5)); // in meters
     }
     else if (propagationModel == "NakagamiPropagationLossModel")
     {
         lossModel = CreateObject<NakagamiPropagationLossModel>();
+        // Set the m-values
+        lossModel->SetAttribute ("m0", DoubleValue (.5));
+        lossModel->SetAttribute ("m1", DoubleValue (.5));
+        lossModel->SetAttribute ("m2", DoubleValue (.5));
     }
     else
     {
