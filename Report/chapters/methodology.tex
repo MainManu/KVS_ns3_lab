@@ -12,8 +12,8 @@ However for this work only the following models were deemed suitable:
 \end{itemize}
 In order to compare them, a ns3 script was set up. It was very similar to the script wifi-spectrum-per-example.cc 
 with some notable changes: Instead of a constant rate Wi-Fi manager (which would make the analysis of the data rate 
-pointless), %TODO look up the correct word
-was used. Furthermore, callbacks for monitoring the Rx power were added, including some tools for value conversions and
+pointless), a Minstrel HT manager was used. 
+Furthermore, callbacks for monitoring the Rx power were added, including some tools for value conversions and
 averaging. Some command line arguments like simulationTime, disctance, propagationModel, etc. were added as well.
 Since these simulations required substantial computational resources, they were run on a remote server. 
 For easy experiment control and file management, a python wrapper script was written. It allowed to run an experiment 
@@ -21,8 +21,9 @@ and download all the output files automatically. This wrapper was then imported 
 testing and data analysis. The data analysis was then performed in the notebook using pandas and matplotlib.
 Since the simulation contains non-deterministic processes and a steady state siimulation is desired,
 the time until a steady state is reached first had to be determined. This was done by running a sample simiulation 
-with one propagation model, distance and time 5 times. Then the confidence interval for the mean was calculated.
-The simulation time was increased until the confidence interval was small enough. 
-
+with one propagation model, distance and a long simulation time. Then the throughput and rx power were plotted over
+time. The time until the throughput and rx power reached a steady state was determined by visual inspection.
+After that, the simulation was run 5 times and the confidence intervals were calculated to verify the steady 
+state assumption.
 
 
