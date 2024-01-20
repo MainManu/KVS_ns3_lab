@@ -1,8 +1,10 @@
+from concurrent.futures import ThreadPoolExecutor
 import os
 import paramiko
 import csv
 import dotenv
 import pickle
+import threading
 from typing import Any, List
 
 
@@ -32,9 +34,10 @@ class remote_host:
 
     def getfile_to(self, remote_path: str, local_path: str) -> None:
         self.sftp.get(remote_path, local_path)
-    
+
     def init_ns3(self) -> None:
-        self.exec(f"cd {self.ns3dir} && ./ns3 clean && ./ns3 configure -- --build=optimized && ./ns3 build")
+        self.exec(
+            f"cd {self.ns3dir} && ./ns3 clean && ./ns3 configure -- --build=optimized && ./ns3 build")
 
     def __del__(self) -> None:
         self.sftp.close()
@@ -44,7 +47,7 @@ class remote_host:
         return f"{self.host}:{self.port}"
 
 
-def init_host()-> remote_host:
+def init_host() -> remote_host:
     dotenv.load_dotenv()
     SSH_USER = os.getenv("SSH_USER")
     SSH_HOST = os.getenv("SSH_HOST")
@@ -53,7 +56,6 @@ def init_host()-> remote_host:
     NS3_DIR = os.getenv("NS3_DIR")
     return remote_host(host=SSH_HOST, port=SSH_PORT,
                        username=SSH_USER, password=SSH_PASSWORD, ns3dir=NS3_DIR, timeout=60)
-
 
 
 class experiment_run:
@@ -138,6 +140,9 @@ class experiment_run:
 
 # TODO: verify
 
+    def bool_to_cpp_str(self, b: bool) -> str:
+        return "true" if b else "false"
+
 
 def combine_all_experiment_parameters(propagationModels_list: list[str], distance_m_list: list[float]) -> list[tuple[propagationModels, float]]:
     return [(propModel, distance) for propModel in propagationModels_list for distance in distance_m_list]
@@ -165,7 +170,8 @@ def run_experiments_until_no_dr(simulationTime_s: float, step_size_m: float):
             run = experiment_run(host=host, propModel=propagationModel, simulationTime_s=simulationTime_s, distance_m=distance,
                                  remote_csv_path=f"{host.ns3dir}/{path}", local_csv_path=f"{path}", export_rx_dr=True, export_summary=True, export_rx_pwr=False, remote_file_cleanup=True)
             runs.append(run)
-            print(f"running experiment for {distance} meters with {propagationModel} propagation")
+            print(
+                f"running experiment for {distance} meters with {propagationModel} propagation")
             try:
                 run.run()
             except Exception as e:
@@ -178,12 +184,13 @@ def run_experiments_until_no_dr(simulationTime_s: float, step_size_m: float):
                 reader = csv.DictReader(f)
                 # check the datarate column for zero values
                 dr = [float(row["ReceivedDataRate"]) for row in reader]
-                if all([d == 0.00 or d==0.01 for d in dr]):
+                if all([d == 0.00 or d == 0.01 for d in dr]):
                     break
             distance += step_size_m
         # pickle.dump(runs, open(f"runs_{propagationModel}.pickle", "wb"))
 
-def test_datarate_over_time(start_time_s: int, end_time_s:int, init_ns3:bool=True ):
+
+def test_datarate_over_time(start_time_s: int, end_time_s: int, init_ns3: bool = True):
     print("test_datarate_over_time")
     print("init host")
     host = init_host()
@@ -191,16 +198,44 @@ def test_datarate_over_time(start_time_s: int, end_time_s:int, init_ns3:bool=Tru
         print("init ns3")
         host.init_ns3()
     runs = []
-    for time_s in range(start_time_s,end_time_s):
+    for time_s in range(start_time_s, end_time_s):
         time_s_f = float(time_s)
         path = f"time_increment_test_{time_s}s"
         run = experiment_run(host=host, propModel=propagationModels[0], simulationTime_s=time_s_f, distance_m=10,
-                         remote_csv_path=f"{host.ns3dir}/{path}", local_csv_path=f"{path}", export_rx_dr=True, export_summary=True, export_rx_pwr=True, remote_file_cleanup=True)
+                             remote_csv_path=f"{host.ns3dir}/{path}", local_csv_path=f"{path}", export_rx_dr=True, export_summary=True, export_rx_pwr=True, remote_file_cleanup=True)
         runs.append(run)
         print(f"running experiment for {time_s} seconds")
         run.run()
         print("done")
     return runs
+
+
+def run_experiments_until_no_dr_multithreaded(thread_limit: int = 4):
+    print("run_experiments_until_no_dr_multithreaded")
+    print("init host")
+    host = init_host()
+    threads = []
+
+    # generate runs
+    for propagationModel in propagationModels:
+        distance = 1.0
+        runs = []
+        for distance_m in range(1, 200):
+            path = f"dr_test_{propagationModel}_{distance}m"
+            run = experiment_run(host=host, propModel=propagationModel, simulationTime_s=hours_to_seconds(1), distance_m=distance,
+                                 remote_csv_path=f"{host.ns3dir}/{path}", local_csv_path=f"{path}", export_rx_dr=True, export_summary=True, export_rx_pwr=False, remote_file_cleanup=True)
+            runs.append(run)
+
+    with ThreadPoolExecutor(max_workers=thread_limit) as executor:
+        for run in runs:
+            try:
+                t = executor.submit(run.run)
+                threads.append(t)
+            except Exception as e:
+                print(e)
+
+    for t in threads:
+        t.result()
 
 
 if __name__ == "__main__":
@@ -220,5 +255,3 @@ if __name__ == "__main__":
                          remote_csv_path=f"{host.ns3dir}/sample", local_csv_path="sample", export_rx_dr=True, export_summary=True, export_rx_pwr=True, remote_file_cleanup=False)
     print(run)
     run.run()
-
-
