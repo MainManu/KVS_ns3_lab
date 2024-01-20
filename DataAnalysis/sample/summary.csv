@@ -1,0 +1,2 @@
+FlowId,SourceAddress,DestinationAddress,ReceivedDataRate,AverageRxPower
+1,10.1.1.1,10.1.1.2,68.74,-38.03
