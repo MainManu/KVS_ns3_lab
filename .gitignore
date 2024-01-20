@@ -41,7 +41,9 @@ Pipfile.lock
 *.pyc
 *.pyo
 
-# app data
+# application data
+DataAnalysis/dr_*
+DataAnalysis/time_*
 DataAnalysis/output/*
 DataAnalysis/output2/*
 DataAnalysis/output3/*

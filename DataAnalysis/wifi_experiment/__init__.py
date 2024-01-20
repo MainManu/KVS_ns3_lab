@@ -1,2 +1,2 @@
-from .utlis import *
 from .analysis_tools import *
+from .utils import *
