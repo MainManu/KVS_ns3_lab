@@ -4,7 +4,7 @@ import csv
 from typing import List
 
 
-propagationModels = ["FriisPropagationLossModel", "FixedRssLossModel",
+propagationModels = ["FixedRssLossModel", "FriisPropagationLossModel",
                      "ThreeLogDistancePropagationLossModel", "TwoRayGroundPropagationLossModel", "NakagamiPropagationLossModel"]
 
 
@@ -12,8 +12,8 @@ class remote_host:
     def __init__(self, host, port, username, password, ns3dir, timeout) -> None:
         self.ssh = paramiko.SSHClient()
         self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        self.ssh.get_transport().set_keepalive(30)
         self.ssh.connect(host, port, username, password, timeout=timeout)
+        self.ssh.get_transport().set_keepalive(30)
         self.sftp = self.ssh.open_sftp()
         self.host = host
         self.port = port
@@ -24,12 +24,25 @@ class remote_host:
         stdin, stdout, stderr = self.ssh.exec_command(command)
         exit_status = stdout.channel.recv_exit_status()
         if exit_status != 0:
+            print(stdout.read().decode("utf-8"))
+            print(stderr.read().decode("utf-8"))
             raise Exception(
                 f"Command {command} failed with exit status {exit_status}")
         return stdout.read().decode("utf-8")
 
     def getfile_to(self, remote_path: str, local_path: str) -> None:
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
         self.sftp.get(remote_path, local_path)
+
+    def init_ns3(self) -> None:
+        print("---Initializing ns3---")
+        print("Cleaning ns3")
+        self.exec(f"{self.ns3dir}/ns3 clean")
+        print("Configuring ns3")
+        self.exec(f"{self.ns3dir}/ns3 configure -- --build=optimized")
+        print("Building ns3")
+        self.exec(f"{self.ns3dir}/ns3 build scratch/wifi-experiment.cc")
+        print("---Done---")
 
     def __del__(self) -> None:
         self.sftp.close()
@@ -103,12 +116,15 @@ class experiment_run:
         os.makedirs(self.local_csv_path, exist_ok=True)
 
     def run(self):
+        print(
+            f"---Running experiment with {self.propModel} at {self.distance_m}m---")
         self.create_output_folders()
-        simulation_command = f"{self.host.ns3dir}/ns3 run scratch/wifi-experiment.cc -- --distance={self.distance_m} --simulationTime={self.simulationTime_s} --csv_export_path={self.remote_csv_path} --export_rx_dr={self.str_export_rx_dr} --export_rx_pwr={self.str_export_rx_pwr} --export_summary={self.str_export_summary} --propagationModel={self.propModel}"
+        simulation_command = f"nohup {self.host.ns3dir}/ns3 run scratch/wifi-experiment.cc -- --distance={self.distance_m} --simulationTime={self.simulationTime_s} --csv_export_path={self.remote_csv_path} --export_rx_dr={self.str_export_rx_dr} --export_rx_pwr={self.str_export_rx_pwr} --export_summary={self.str_export_summary} --propagationModel={self.propModel} &"
         output = self.host.exec(simulation_command)
         print(output)
         self.get_output_files()
         self.cleanup_remote_files()
+        print("---Done---")
 
 # TODO: verify
 
@@ -125,15 +141,41 @@ def hours_to_seconds(hours: float) -> float:
     return hours * 60 * 60
 
 
-def run_experiments_until_no_dr(simulationTime_s: float, step_size_m: float):
-    for propagationModel in propagationModels:
-        distance = 1.0
-        host = remote_host(host=SSH_HOST, port=SSH_PORT,
-                           username=SSH_USERNAME, password=SSH_PASSWORD, ns3dir=NS3DIR)
+def run_experiments_until_no_dr(simulationTime_s: float, step_size_m: float, timeout_seconds: float, output_folder: str) -> List[experiment_run]:
+    import os
+    import dotenv
+    dotenv.load_dotenv()
+    SSH_USERNAME = os.getenv("SSH_USERNAME")
+    SSH_HOST = os.getenv("SSH_HOST")
+    SSH_PORT = os.getenv("SSH_PORT")
+    SSH_PASSWORD = os.getenv("SSH_PASSWORD")
+    NS3DIR = os.getenv("NS3DIR")
 
+    host = remote_host(host=SSH_HOST, port=SSH_PORT,
+                       username=SSH_USERNAME, password=SSH_PASSWORD, ns3dir=NS3DIR, timeout=timeout_seconds)
+    host.init_ns3()
+    global propagationModels
+    propagationModel = propagationModels[0]
+    distance = 1.0
+
+    runs = []
+
+    # print("---Running fixed rss experiment until 2000m---")
+    # for distance in range(1, 2000, 1):
+    #     run = experiment_run(host=host, propModel=propagationModel, simulationTime_s=simulationTime_s, distance_m=distance,
+    #                          remote_csv_path=f"{host.ns3dir}/{output_folder}/{propagationModel}_{distance}_m", local_csv_path=f"{output_folder}/{propagationModel}_{distance}_m", export_rx_dr=True, export_summary=True, export_rx_pwr=True, remote_file_cleanup=True)
+    #     run.run()
+    #     runs.append(run)
+    # print("---done---")
+    reasonablePropagationModels = propagationModels
+
+    print("---Running experiments until no dr---")
+    for propagationModel in reasonablePropagationModels:
+        distance = 1.0
         while True:
             run = experiment_run(host=host, propModel=propagationModel, simulationTime_s=simulationTime_s, distance_m=distance,
-                                 remote_csv_path=f"{host.ns3dir}/sample", local_csv_path="sample", export_rx_dr=True, export_summary=True, export_rx_pwr=False, remote_file_cleanup=True)
+                                 remote_csv_path=f"{host.ns3dir}/{output_folder}/{propagationModel}_{distance}_m", local_csv_path=f"{output_folder}/{propagationModel}_{distance}_m", export_rx_dr=True, export_summary=True, export_rx_pwr=True, remote_file_cleanup=True)
+            runs.append(run)
             try:
                 run.run()
             except Exception as e:
@@ -144,10 +186,14 @@ def run_experiments_until_no_dr(simulationTime_s: float, step_size_m: float):
                 # create csv parser
                 reader = csv.DictReader(f)
                 # check the datarate column for zero values
-                dr = [float(row["datarate"]) for row in reader]
+                dr = [float(row["ReceivedDataRate"]) for row in reader]
                 if all([d == 0.00 for d in dr]):
+                    print(
+                        f"Experiment with {propagationModel} at {distance}m has no dr, moving on to next model")
                     break
             distance += step_size_m
+    print("---Done---")
+    return runs
 
 
 if __name__ == "__main__":

@@ -40,3 +40,9 @@ Pipfile.lock
 # python 
 *.pyc
 *.pyo
+
+# app data
+DataAnalysis/output/*
+DataAnalysis/output2/*
+DataAnalysis/output3/*
+
