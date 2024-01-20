@@ -9,6 +9,7 @@ python-dotenv = "*"
 paramiko = "*"
 pandas = "*"
 matplotlib = "*"
+seaborn = "*"
 
 [dev-packages]
 
