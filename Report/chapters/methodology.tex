@@ -15,15 +15,24 @@ with some notable changes: Instead of a constant rate Wi-Fi manager (which would
 pointless), a Minstrel HT manager was used. 
 Furthermore, callbacks for monitoring the Rx power were added, including some tools for value conversions and
 averaging. Some command line arguments like simulationTime, disctance, propagationModel, etc. were added as well.
+Additionally, callbacks were added to the script to save the Rx power and throughput to a file.
+Both of these saved the time and value of the respective variable in a std::map. At the end of the simulation, 
+both maps were exported to csv files. This would make importing them into pandas trivial.
+Traffic was generated at the application layer using a UdpClientServerHelper set to a constant data rate of 75 Mbps.
 Since these simulations required substantial computational resources, they were run on a remote server. 
 For easy experiment control and file management, a python wrapper script was written. It allowed to run an experiment 
 and download all the output files automatically. This wrapper was then imported into a jupyter notebook for 
 testing and data analysis. The data analysis was then performed in the notebook using pandas and matplotlib.
-Since the simulation contains non-deterministic processes and a steady state siimulation is desired,
-the time until a steady state is reached first had to be determined. This was done by running a sample simiulation 
-with one propagation model, distance and a long simulation time. Then the throughput and rx power were plotted over
-time. The time until the throughput and rx power reached a steady state was determined by visual inspection.
-After that, the simulation was run 5 times and the confidence intervals were calculated to verify the steady 
-state assumption.
-
-
+The source code for the ns3 script, the python wrapper and the jupyter notebooks can be found on \cite[the author's github]{github}.
+If you wish to reproduce the results, please follow the instructions in the README.md file on how to 
+set up ns3.39, symlink the repositories scratch folder into ns3, set up the python environment, set up the 
+environment variables and run the jupyter notebooks.
+%TODO: add expected results with sources
+The expectations for the results of the different simulaitons were quite different.
+The FixedRssLossModel isolates the propagation delay as the only effect of the distance on the transmission. This means 
+that the data rate should be constant until the distance is so large that the propagation delay causes issues with the 
+WiFi protocol timings. This should result in a sudden drop in the datarate as soon as this 
+critical distance is reached. The Rx power per definition should stay constant.
+For the other models, the data rate should stay constant until the Rx power drops far enough that the current Htmcs value is 
+no longer sufficient to maintain the data rate. This should result in a sudden drop in the data rate down to the datarate assiciated with the 
+next Htmcs value.

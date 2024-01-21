@@ -1,0 +1,68 @@
+\section{Results}
+
+Since the simulation contains non-deterministic processes and a steady state siimulation is desired,
+the time until a steady state is reached first had to be determined. Initially, this was attempted by running multimple
+simulations with gradually increasing simulation time. The result can be seen in figure \ref{fig:steadyStateInitial}.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.4\textwidth]{../DataAnalysis/results/dr_over_time.png}
+    \caption{average datarate over simulation duration}
+    \label{fig:steadyStateInitial}
+\end{figure}
+However, this approach was deemed unrealistic. Upon plotting the data rate of a single simulation over time,
+it was found that the data rate fluctuated heavily in the first 3 seconds and then stabilized.
+This can be seen in figure \ref{fig:steadyStateInitialSingle}.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.4\textwidth]{../DataAnalysis/results/dr_over_time_single_run.png}
+    \caption{datarate over simulation time of a single run}
+    \label{fig:steadyStateInitialSingle}
+\end{figure}
+
+Keeping this in mind, the first graphic was redone, this time only using the data rate after 3 seconds for each simulation.
+The result can be seen in figure \ref{fig:steadyStateFinal}.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.4\textwidth]{../DataAnalysis/results/dr_over_time_without_first_3_seconds.png}
+    \caption{average datarate over simulation duration without first 3 seconds}
+    \label{fig:steadyStateFinal}
+\end{figure}
+
+It shows that the average data rate of a simulation is stable after 3 seconds and independent of how much longer the simulation 
+time is running for - which in turn means the the datarate fluctuations seen in figure \ref{fig:steadyStateInitialSingle} can be assumed to be 
+uniformly distributed. This means as long as the simulation time is long enough after the 3 seconds to reach a statistically relevant 
+average value, the data rate can be assumed to be independent of the simulation time. With this information, it was 
+decided to run the simulaitons for 10 seconds and only use the output after 3 seconds.
+
+The same procedure was performed for the Rx power. The results of one run can be seen in figure \ref{fig:rxPowerSteadyState}.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.4\textwidth]{../DataAnalysis/results/results_rx_pwr_over_time.png}
+    \caption{Rx power over simulation duration}
+    \label{fig:rxPowerSteadyState}
+\end{figure}
+
+For the Rx power, the fluctuations are much smaller. Therefore, it was decided to simply use the average Rx power over the
+time of the simulation. This meant the averaging could be offloaded to the ns3 script, drastically 
+reducing the computational load of the data analysis.
+
+After determining the steady state, the simulations were run for 10 seconds of simulation time from a distance of 1 meter 
+up to a distance where no more data arrived for each propagation model with a step size of 1 meter.
+
+The results for the data rate can be seen in figure \ref{fig:drOverDistance}.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.4\textwidth]{../DataAnalysis/results/data_rate_comp.png}
+    \caption{data rate over distance}
+    \label{fig:drOverDistance}
+\end{figure}
+
+The results for the Rx power can be seen in figure \ref{fig:rxPowerOverDistance}.   
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.4\textwidth]{../DataAnalysis/results/rx_pwr_comp.png}
+    \caption{Rx power over distance}
+    \label{fig:rxPowerOverDistance}
+\end{figure}
