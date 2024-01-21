@@ -1,7 +1,8 @@
 \section[short]{Methodology}
 
-First of all, suitable propagation models had to be selected.
+First, suitable propagation models had to be selected.
 NS3 supports a multitude of propagation models which can be found on \cite[the ns3 website]{ns3prpmod}.
+This list also includes explanations on how each model works including its equations.
 However for this work only the following models were deemed suitable:
 \begin{itemize}
     \item FriisPropagationLossModel
@@ -15,9 +16,11 @@ with some notable changes: Instead of a constant rate Wi-Fi manager (which would
 pointless), a Minstrel HT manager was used. 
 Furthermore, callbacks for monitoring the Rx power were added, including some tools for value conversions and
 averaging. Some command line arguments like simulationTime, disctance, propagationModel, etc. were added as well.
-Additionally, callbacks were added to the script to save the Rx power and throughput to a file.
-Both of these saved the time and value of the respective variable in a std::map. At the end of the simulation, 
-both maps were exported to csv files. This would make importing them into pandas trivial.
+The callback monitoring the data rate was implementing by dividing the app layer packet size by the time between
+packets. This approach had to take packet aggregation into account, since all aggregated packets have the same 
+arrival time. 
+Both callbacks saved the time and value of the respective variable in a std::map. At the end of the simulation, 
+both maps were exported to csv files. This made importing them into pandas trivial.
 Traffic was generated at the application layer using a UdpClientServerHelper set to a constant data rate of 75 Mbps.
 Since these simulations required substantial computational resources, they were run on a remote server. 
 For easy experiment control and file management, a python wrapper script was written. It allowed to run an experiment 
@@ -27,12 +30,14 @@ The source code for the ns3 script, the python wrapper and the jupyter notebooks
 If you wish to reproduce the results, please follow the instructions in the README.md file on how to 
 set up ns3.39, symlink the repositories scratch folder into ns3, set up the python environment, set up the 
 environment variables and run the jupyter notebooks.
-%TODO: add expected results with sources
-The expectations for the results of the different simulaitons were quite different.
+Additionally, please refer to the NS3 documentation for more details on the ns3 script
+works and how to run it \cite{ns3doc}.
+%TODO: add expected results with source s
+The expectations for the results of the different simulations were quite different.
 The FixedRssLossModel isolates the propagation delay as the only effect of the distance on the transmission. This means 
 that the data rate should be constant until the distance is so large that the propagation delay causes issues with the 
-WiFi protocol timings. This should result in a sudden drop in the datarate as soon as this 
+WiFi protocol timings. This should result in a sudden drop in the data rate as soon as this 
 critical distance is reached. The Rx power per definition should stay constant.
-For the other models, the data rate should stay constant until the Rx power drops far enough that the current Htmcs value is 
+For the other models, the data rate should stay constant until the Rx power drops far enough that the current HtMCS value is 
 no longer sufficient to maintain the data rate. This should result in a sudden drop in the data rate down to the datarate assiciated with the 
-next Htmcs value.
+next HtMCS value. A list of the HtMCS values and their associated data rates can be found in \cite[this table by the wireless lan professionals conference]{MCS}.

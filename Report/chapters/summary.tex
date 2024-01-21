@@ -1,0 +1,18 @@
+\section{Summary}
+\label{ch:summary}
+
+In this paper, the performance of the IEEE 802.11n standard over 
+increasing distance using different propagation models was investigated using the NS3 (version 3.39) network simulator.
+It was found that for a simple ad hoc network between 2 nodes without any interference, 
+3 seconds suffice to reach a steady state. 
+Additionally, the results show that the propagation model has a significant impact on the data rate and the received power.
+Furthermore, it was found that special care has to be taken when parametrizing the models if taking 
+advantage of the variety of offered propagation models is desired.
+Future work should look at the parameters of the different propagation models and how they affect 
+range and data rate in more detail. The influence of different topologies and interference should also be investigated.
+However, for some models data rates above what the application produces was observed at the appp layer  between 50 and 100 meters. This should be 
+investigated in future work.
+Shortly before the submission of this paper, it was noticed the ns3 script did not specify a random seed. 
+This means that the results depend on the default random seed of the ns3 simulator and all simulations 
+which are run with identical parameters will produce the same results. This is a common pitfall in ns3 simulations \cite{10.1145/1096166.1096174},
+and should be avoided in future work. 

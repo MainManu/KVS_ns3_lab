@@ -1,3 +1,27 @@
 \begin{abstract}
-    
+Network simulation plays a crucial role in evaluating and testing protocols and algorithms
+within a controlled environment. This paper focuses on the NS3 network simulator, 
+a widely-used open-source tool for discrete event network simulations. Specifically, 
+the study compares various propagation loss models within NS3 for the IEEE 802.11n standard, examining their impact on wireless communication in a simple point-to-point link scenario.
+The selected models include FriisPropagationLossModel, FixedRssLossModel, 
+ThreeLogDistancePropagationLossModel, TwoRayGroundPropagationLossModel, and NakagamiPropagationLossModel. To conduct the comparisons, a custom NS3 script was developed, incorporating a Minstrel HT manager,
+Rx power and datarate monitoring, and UdpClientServerHelper for traffic generation. Simulations were executed remotely due to computational resource requirements, and a Python wrapper 
+facilitated remote experiment control and data analysis.
+The results indicate that the choice of the model significantly 
+influences both data rate and received signal power. The study establishes a stable 
+state after 3 seconds of simulation, providing a basis for meaningful data rate comparisons. 
+Unexpected spikes in data rate for certain models between 50 and 100 meters warrant further 
+investigation. The Rx power results highlight similarities between specific models, urging a 
+deeper examination of their configurations and parameter values in future work.
+This research contributes valuable insights into the performance of the IEEE 802.11n 
+standard over varying distances, emphasizing the importance of propagation model selection. 
+It underscores the need for careful parameterization when utilizing diverse propagation models. 
+Future work should delve into the detailed impact of model parameters on range and data rate, 
+exploring different network topologies and interference scenarios.
+
 \end{abstract}
+
+
+\begin{IEEEkeywords}
+NS3, propagation loss models, 802.11n, network simulation, wireless communication
+\end{IEEEkeywords}

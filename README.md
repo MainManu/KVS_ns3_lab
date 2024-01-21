@@ -39,8 +39,51 @@ ln -s $REPO_FOLDER/scratch $NS3DIR
 
 Now you can work within ns3 as usual, and track the scratch folder using this repo.
 
+### 4. run the simulation
+
+```
+./$NS3DIR/ns3 run scratch/wifi-experiment.cc -- [args]
+```
+Please refer to the project report for a list of available arguments.
+
+
 ## Project report
 
 The project report is written in latex. Its source files are located in the report/ folder. 
 To build the document run build.sh. Make sure to install texlive first. Depending on your package 
 manager you might need to install additional subpackages.
+
+## python scripts
+
+The python scripts are located in the DataAnalysis folder. To innstall all dependencies run
+
+```
+pip3 install -U pipenv
+pipenv install
+```
+
+To run the scripts, first activate the virtual environment
+
+```
+pipenv shell
+```
+
+### setting up a .env file
+In order to run the scripts, you need to set up a .env file in the DataAnalysis folder.
+This should contain the following variables:
+
+```
+SSH_HOST="hostname"
+SSH_USER="username"
+SSH_PORT="port"
+SSH_PASSWORD="pw"
+NS3_DIR="path to ns3 folder on remote host"
+```
+
+### running the notebooks
+
+
+The actual data analysis is located in initial_experiment.ipynb for the steady state determination and dr_pwr_over_distance_experiment.ipynb for the distance to power ratio experiment. 
+The python wrapper for the ns3 simulation is located in the wifi-experiment module located in the respectively named folder.
+You might need to run the experiments first using the testing_wifi_experiment.ipynb notebook. This will generate the data files needed for the analysis.
+An example of how the output should look like is located in the sample_data folder.
