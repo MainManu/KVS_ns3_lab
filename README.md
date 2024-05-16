@@ -55,7 +55,7 @@ manager you might need to install additional subpackages.
 
 ## python scripts
 
-The python scripts are located in the DataAnalysis folder. To innstall all dependencies run
+The python scripts are located in the DataAnalysis folder. To install all dependencies run
 
 ```
 pip3 install -U pipenv
